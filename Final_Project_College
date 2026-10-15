@@ -540,11 +540,15 @@ MongoDB connected successfully!
 5. View All Students
 6. Exit
 
-Enter choice:
+Enter choice: 1
+Enter student ID: 101
 
-
-
-
-
-    }
+{
+  "studentId": "101",
+  "name": "Rahul Sharma",
+  "department": "CSE",
+  "cgpa": 8.5,
+  "skills": "Java",
+  "_id": "..."
 }
+
