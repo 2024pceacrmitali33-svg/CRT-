@@ -1,0 +1,739 @@
+package com.example;
+
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Scanner;
+
+import org.bson.Document;
+import org.bson.types.ObjectId;
+
+import com.mongodb.client.MongoClient;
+import com.mongodb.client.MongoClients;
+import com.mongodb.client.MongoCollection;
+import com.mongodb.client.MongoDatabase;
+import com.mongodb.client.model.Accumulators;
+import com.mongodb.client.model.Aggregates;
+import com.mongodb.client.model.Filters;
+import com.mongodb.client.model.Sorts;
+import com.mongodb.client.model.Updates;
+
+public class App {
+    private static final Scanner SC = new Scanner(System.in);
+
+    private static MongoCollection<Document> students;
+    private static MongoCollection<Document> companies;
+    private static MongoCollection<Document> jobDrives;
+    private static MongoCollection<Document> applications;
+
+    public static void main(String[] args) {
+        String uri = System.getenv("MONGODB_URI");
+        if (uri == null || uri.isBlank()) {
+            System.out.println("ERROR: MONGODB_URI environment variable is not set.");
+            System.out.println("In PowerShell, set it with: $env:MONGODB_URI=\"YOUR_ATLAS_CONNECTION_STRING\"");
+            return;
+        }
+
+        try (MongoClient client = MongoClients.create(uri)) {
+            MongoDatabase db = client.getDatabase("college");
+            students = db.getCollection("students");
+            companies = db.getCollection("companies");
+            jobDrives = db.getCollection("jobDrives");
+            applications = db.getCollection("applications");
+
+            db.runCommand(new Document("ping", 1));
+            System.out.println("Connected to MongoDB Atlas. Database: college");
+            System.out.println("Collections used: students, companies, jobDrives, applications");
+
+            mainMenu();
+        } catch (Exception e) {
+            System.out.println("Application/database error: " + e.getMessage());
+            System.out.println("Check MONGODB_URI, Atlas network access, credentials, and database permissions.");
+        }
+    }
+
+    private static void mainMenu() {
+        while (true) {
+            System.out.println("\n========== PLACEMENT MANAGEMENT SYSTEM ==========");
+            System.out.println("1. Student Management");
+            System.out.println("2. Company Management");
+            System.out.println("3. Job Drive Management");
+            System.out.println("4. Application Management");
+            System.out.println("5. Candidate Search");
+            System.out.println("6. Placement Analytics");
+            System.out.println("7. Exit");
+            int choice = readInt("Enter choice: ");
+
+            switch (choice) {
+                case 1 -> studentMenu();
+                case 2 -> companyMenu();
+                case 3 -> driveMenu();
+                case 4 -> applicationMenu();
+                case 5 -> candidateSearch();
+                case 6 -> analyticsMenu();
+                case 7 -> {
+                    System.out.println("Exiting Placement Management System.");
+                    return;
+                }
+                default -> System.out.println("Invalid choice. Select 1-7.");
+            }
+        }
+    }
+
+    // -------------------- STUDENT MANAGEMENT --------------------
+
+    private static void studentMenu() {
+        while (true) {
+            System.out.println("\n--- STUDENT MANAGEMENT ---");
+            System.out.println("1. Add student");
+            System.out.println("2. View all students");
+            System.out.println("3. Search student by Student ID");
+            System.out.println("4. Update student");
+            System.out.println("5. Delete student");
+            System.out.println("6. Back");
+            int choice = readInt("Enter choice: ");
+
+            switch (choice) {
+                case 1 -> addStudent();
+                case 2 -> printDocuments(students.find().sort(Sorts.ascending("studentId")));
+                case 3 -> printOne(students.find(Filters.eq("studentId", readRequired("Student ID: "))).first());
+                case 4 -> updateStudent();
+                case 5 -> deleteStudent();
+                case 6 -> { return; }
+                default -> System.out.println("Invalid choice.");
+            }
+        }
+    }
+
+    private static void addStudent() {
+        String id = readRequired("Student ID (unique): ");
+        if (students.find(Filters.eq("studentId", id)).first() != null) {
+            System.out.println("A student with that ID already exists.");
+            return;
+        }
+
+        String name = readRequired("Full name: ");
+        String department = readRequired("Department (e.g. CSE): ");
+        double cgpa = readDouble("CGPA (0-10): ");
+        if (cgpa < 0 || cgpa > 10) {
+            System.out.println("CGPA must be between 0 and 10.");
+            return;
+        }
+        String email = readRequired("Email: ");
+        String phone = readRequired("Phone: ");
+        List<String> skills = readCsvList("Skills (comma-separated; blank for none): ");
+
+        Document doc = new Document("studentId", id)
+                .append("name", name)
+                .append("department", department)
+                .append("cgpa", cgpa)
+                .append("email", email)
+                .append("phone", phone)
+                .append("skills", skills)
+                .append("createdAt", Instant.now().toString());
+
+        students.insertOne(doc);
+        System.out.println("Student added. MongoDB _id: " + doc.getObjectId("_id"));
+    }
+
+    private static void updateStudent() {
+        String id = readRequired("Student ID to update: ");
+        Document existing = students.find(Filters.eq("studentId", id)).first();
+        if (existing == null) {
+            System.out.println("Student not found.");
+            return;
+        }
+
+        System.out.println("Leave a field blank to keep its current value.");
+        String name = readLine("Name [" + existing.getString("name") + "]: ").trim();
+        String dept = readLine("Department [" + existing.getString("department") + "]: ").trim();
+        String email = readLine("Email [" + existing.getString("email") + "]: ").trim();
+        String phone = readLine("Phone [" + existing.getString("phone") + "]: ").trim();
+        String cgpaText = readLine("CGPA [" + existing.get("cgpa") + "]: ").trim();
+
+        List<org.bson.conversions.Bson> changes = new ArrayList<>();
+        if (!name.isEmpty()) changes.add(Updates.set("name", name));
+        if (!dept.isEmpty()) changes.add(Updates.set("department", dept));
+        if (!email.isEmpty()) changes.add(Updates.set("email", email));
+        if (!phone.isEmpty()) changes.add(Updates.set("phone", phone));
+        if (!cgpaText.isEmpty()) {
+            try {
+                double cgpa = Double.parseDouble(cgpaText);
+                if (cgpa < 0 || cgpa > 10) {
+                    System.out.println("CGPA must be between 0 and 10. No update made.");
+                    return;
+                }
+                changes.add(Updates.set("cgpa", cgpa));
+            } catch (NumberFormatException e) {
+                System.out.println("Invalid CGPA. No update made.");
+                return;
+            }
+        }
+
+        String skillsText = readLine("Replace skills with comma-separated values (blank to keep): ").trim();
+        if (!skillsText.isEmpty()) changes.add(Updates.set("skills", parseCsv(skillsText)));
+
+        if (changes.isEmpty()) {
+            System.out.println("No changes entered.");
+            return;
+        }
+        students.updateOne(Filters.eq("studentId", id), Updates.combine(changes));
+        System.out.println("Student updated.");
+    }
+
+    private static void deleteStudent() {
+        String id = readRequired("Student ID to delete: ");
+        long related = applications.countDocuments(Filters.eq("studentId", id));
+        if (related > 0) {
+            System.out.println("Cannot delete: " + related + " application(s) reference this student.");
+            System.out.println("Withdraw/delete those applications first.");
+            return;
+        }
+        long deleted = students.deleteOne(Filters.eq("studentId", id)).getDeletedCount();
+        System.out.println(deleted == 1 ? "Student deleted." : "Student not found.");
+    }
+
+    // -------------------- COMPANY MANAGEMENT --------------------
+
+    private static void companyMenu() {
+        while (true) {
+            System.out.println("\n--- COMPANY MANAGEMENT ---");
+            System.out.println("1. Register company");
+            System.out.println("2. View all companies");
+            System.out.println("3. Search company by ID");
+            System.out.println("4. Update company");
+            System.out.println("5. Delete company");
+            System.out.println("6. Back");
+            int choice = readInt("Enter choice: ");
+
+            switch (choice) {
+                case 1 -> addCompany();
+                case 2 -> printDocuments(companies.find().sort(Sorts.ascending("companyId")));
+                case 3 -> printOne(companies.find(Filters.eq("companyId", readRequired("Company ID: "))).first());
+                case 4 -> updateCompany();
+                case 5 -> deleteCompany();
+                case 6 -> { return; }
+                default -> System.out.println("Invalid choice.");
+            }
+        }
+    }
+
+    private static void addCompany() {
+        String id = readRequired("Company ID (unique): ");
+        if (companies.find(Filters.eq("companyId", id)).first() != null) {
+            System.out.println("Company ID already exists.");
+            return;
+        }
+        Document doc = new Document("companyId", id)
+                .append("name", readRequired("Company name: "))
+                .append("industry", readRequired("Industry: "))
+                .append("location", readRequired("Location: "))
+                .append("contactEmail", readRequired("Contact email: "))
+                .append("createdAt", Instant.now().toString());
+        companies.insertOne(doc);
+        System.out.println("Company registered.");
+    }
+
+    private static void updateCompany() {
+        String id = readRequired("Company ID to update: ");
+        Document existing = companies.find(Filters.eq("companyId", id)).first();
+        if (existing == null) {
+            System.out.println("Company not found.");
+            return;
+        }
+        System.out.println("Leave a field blank to keep its current value.");
+        List<org.bson.conversions.Bson> changes = new ArrayList<>();
+        String name = readLine("Name [" + existing.getString("name") + "]: ").trim();
+        String industry = readLine("Industry [" + existing.getString("industry") + "]: ").trim();
+        String location = readLine("Location [" + existing.getString("location") + "]: ").trim();
+        String email = readLine("Contact email [" + existing.getString("contactEmail") + "]: ").trim();
+        if (!name.isEmpty()) changes.add(Updates.set("name", name));
+        if (!industry.isEmpty()) changes.add(Updates.set("industry", industry));
+        if (!location.isEmpty()) changes.add(Updates.set("location", location));
+        if (!email.isEmpty()) changes.add(Updates.set("contactEmail", email));
+        if (changes.isEmpty()) {
+            System.out.println("No changes entered.");
+            return;
+        }
+        companies.updateOne(Filters.eq("companyId", id), Updates.combine(changes));
+        System.out.println("Company updated.");
+    }
+
+    private static void deleteCompany() {
+        String id = readRequired("Company ID to delete: ");
+        if (jobDrives.countDocuments(Filters.eq("companyId", id)) > 0) {
+            System.out.println("Cannot delete: job drives reference this company. Delete those drives/applications first.");
+            return;
+        }
+        long deleted = companies.deleteOne(Filters.eq("companyId", id)).getDeletedCount();
+        System.out.println(deleted == 1 ? "Company deleted." : "Company not found.");
+    }
+
+    // -------------------- JOB DRIVE MANAGEMENT --------------------
+
+    private static void driveMenu() {
+        while (true) {
+            System.out.println("\n--- JOB DRIVE MANAGEMENT ---");
+            System.out.println("1. Create job drive");
+            System.out.println("2. View all job drives");
+            System.out.println("3. Search job drive by ID");
+            System.out.println("4. Update job drive");
+            System.out.println("5. Delete job drive");
+            System.out.println("6. Back");
+            int choice = readInt("Enter choice: ");
+
+            switch (choice) {
+                case 1 -> addDrive();
+                case 2 -> printDocuments(jobDrives.find().sort(Sorts.ascending("driveId")));
+                case 3 -> printOne(jobDrives.find(Filters.eq("driveId", readRequired("Drive ID: "))).first());
+                case 4 -> updateDrive();
+                case 5 -> deleteDrive();
+                case 6 -> { return; }
+                default -> System.out.println("Invalid choice.");
+            }
+        }
+    }
+
+    private static void addDrive() {
+        String id = readRequired("Drive ID (unique): ");
+        if (jobDrives.find(Filters.eq("driveId", id)).first() != null) {
+            System.out.println("Drive ID already exists.");
+            return;
+        }
+        String companyId = readRequired("Company ID: ");
+        Document company = companies.find(Filters.eq("companyId", companyId)).first();
+        if (company == null) {
+            System.out.println("Company ID does not exist. Register the company first.");
+            return;
+        }
+
+        double minCgpa = readDouble("Minimum CGPA (0-10): ");
+        if (minCgpa < 0 || minCgpa > 10) {
+            System.out.println("Minimum CGPA must be between 0 and 10.");
+            return;
+        }
+        double salary = readDouble("Annual salary/package (numeric amount): ");
+        if (salary < 0) {
+            System.out.println("Salary cannot be negative.");
+            return;
+        }
+
+        Document doc = new Document("driveId", id)
+                .append("companyId", companyId)
+                .append("companyName", company.getString("name"))
+                .append("role", readRequired("Job role: "))
+                .append("eligibleDepartment", readRequired("Eligible department (e.g. CSE or ALL): "))
+                .append("minCgpa", minCgpa)
+                .append("salary", salary)
+                .append("deadline", readRequired("Application deadline (e.g. 2026-12-31): "))
+                .append("status", "Open")
+                .append("createdAt", Instant.now().toString());
+        jobDrives.insertOne(doc);
+        System.out.println("Job drive created.");
+    }
+
+    private static void updateDrive() {
+        String id = readRequired("Drive ID to update: ");
+        Document existing = jobDrives.find(Filters.eq("driveId", id)).first();
+        if (existing == null) {
+            System.out.println("Job drive not found.");
+            return;
+        }
+        System.out.println("Leave a field blank to keep its current value.");
+        List<org.bson.conversions.Bson> changes = new ArrayList<>();
+        String role = readLine("Role [" + existing.getString("role") + "]: ").trim();
+        String dept = readLine("Eligible department [" + existing.getString("eligibleDepartment") + "]: ").trim();
+        String minText = readLine("Minimum CGPA [" + existing.get("minCgpa") + "]: ").trim();
+        String salaryText = readLine("Salary [" + existing.get("salary") + "]: ").trim();
+        String deadline = readLine("Deadline [" + existing.getString("deadline") + "]: ").trim();
+        String status = readLine("Status (Open/Closed) [" + existing.getString("status") + "]: ").trim();
+
+        if (!role.isEmpty()) changes.add(Updates.set("role", role));
+        if (!dept.isEmpty()) changes.add(Updates.set("eligibleDepartment", dept));
+        if (!deadline.isEmpty()) changes.add(Updates.set("deadline", deadline));
+        if (!status.isEmpty()) {
+            if (!status.equalsIgnoreCase("Open") && !status.equalsIgnoreCase("Closed")) {
+                System.out.println("Status must be Open or Closed. No update made.");
+                return;
+            }
+            changes.add(Updates.set("status", status.substring(0, 1).toUpperCase() + status.substring(1).toLowerCase()));
+        }
+        try {
+            if (!minText.isEmpty()) {
+                double value = Double.parseDouble(minText);
+                if (value < 0 || value > 10) throw new IllegalArgumentException();
+                changes.add(Updates.set("minCgpa", value));
+            }
+            if (!salaryText.isEmpty()) {
+                double value = Double.parseDouble(salaryText);
+                if (value < 0) throw new IllegalArgumentException();
+                changes.add(Updates.set("salary", value));
+            }
+        } catch (Exception e) {
+            System.out.println("Invalid CGPA or salary. No update made.");
+            return;
+        }
+        if (changes.isEmpty()) {
+            System.out.println("No changes entered.");
+            return;
+        }
+        jobDrives.updateOne(Filters.eq("driveId", id), Updates.combine(changes));
+        System.out.println("Job drive updated.");
+    }
+
+    private static void deleteDrive() {
+        String id = readRequired("Drive ID to delete: ");
+        if (applications.countDocuments(Filters.eq("driveId", id)) > 0) {
+            System.out.println("Cannot delete: applications reference this drive. Withdraw/delete those applications first.");
+            return;
+        }
+        long deleted = jobDrives.deleteOne(Filters.eq("driveId", id)).getDeletedCount();
+        System.out.println(deleted == 1 ? "Job drive deleted." : "Job drive not found.");
+    }
+
+    // -------------------- APPLICATION MANAGEMENT --------------------
+
+    private static void applicationMenu() {
+        while (true) {
+            System.out.println("\n--- APPLICATION MANAGEMENT ---");
+            System.out.println("1. Apply student to a job drive");
+            System.out.println("2. View all applications");
+            System.out.println("3. View applications by student ID");
+            System.out.println("4. Update application status");
+            System.out.println("5. Withdraw application");
+            System.out.println("6. Back");
+            int choice = readInt("Enter choice: ");
+
+            switch (choice) {
+                case 1 -> applyToDrive();
+                case 2 -> printDocuments(applications.find().sort(Sorts.ascending("appliedAt")));
+                case 3 -> printDocuments(applications.find(Filters.eq("studentId", readRequired("Student ID: "))));
+                case 4 -> updateApplicationStatus();
+                case 5 -> withdrawApplication();
+                case 6 -> { return; }
+                default -> System.out.println("Invalid choice.");
+            }
+        }
+    }
+
+    private static void applyToDrive() {
+        String studentId = readRequired("Student ID: ");
+        Document student = students.find(Filters.eq("studentId", studentId)).first();
+        if (student == null) {
+            System.out.println("Student not found. Add the student first.");
+            return;
+        }
+
+        String driveId = readRequired("Drive ID: ");
+        Document drive = jobDrives.find(Filters.eq("driveId", driveId)).first();
+        if (drive == null) {
+            System.out.println("Job drive not found.");
+            return;
+        }
+        if (!"Open".equalsIgnoreCase(drive.getString("status"))) {
+            System.out.println("This job drive is closed.");
+            return;
+        }
+
+        String department = student.getString("department");
+        String eligibleDepartment = drive.getString("eligibleDepartment");
+        double cgpa = numberValue(student.get("cgpa"), -1);
+        double minCgpa = numberValue(drive.get("minCgpa"), 0);
+
+        if (eligibleDepartment != null && !"ALL".equalsIgnoreCase(eligibleDepartment)
+                && !eligibleDepartment.equalsIgnoreCase(department)) {
+            System.out.println("Student department does not meet the eligibility criteria.");
+            return;
+        }
+        if (cgpa < minCgpa) {
+            System.out.println("Student CGPA does not meet the minimum requirement.");
+            return;
+        }
+        if (applications.find(Filters.and(
+                Filters.eq("studentId", studentId),
+                Filters.eq("driveId", driveId))).first() != null) {
+            System.out.println("This student has already applied to this drive.");
+            return;
+        }
+
+        Document application = new Document("applicationId", "APP-" + new ObjectId().toHexString())
+                .append("studentId", studentId)
+                .append("studentName", student.getString("name"))
+                .append("driveId", driveId)
+                .append("companyId", drive.getString("companyId"))
+                .append("companyName", drive.getString("companyName"))
+                .append("role", drive.getString("role"))
+                .append("status", "Applied")
+                .append("appliedAt", Instant.now().toString());
+        applications.insertOne(application);
+        System.out.println("Application submitted. Application ID: " + application.getString("applicationId"));
+    }
+
+    private static void updateApplicationStatus() {
+        String id = readRequired("Application ID: ");
+        Document existing = applications.find(Filters.eq("applicationId", id)).first();
+        if (existing == null) {
+            System.out.println("Application not found.");
+            return;
+        }
+        System.out.println("Allowed statuses: Applied, Shortlisted, Interview, Selected, Rejected, Withdrawn");
+        String status = readRequired("New status: ");
+        String normalized = normalizeApplicationStatus(status);
+        if (normalized == null) {
+            System.out.println("Invalid status.");
+            return;
+        }
+        applications.updateOne(Filters.eq("applicationId", id),
+                Updates.combine(Updates.set("status", normalized),
+                        Updates.set("updatedAt", Instant.now().toString())));
+        System.out.println("Application status updated.");
+    }
+
+    private static void withdrawApplication() {
+        String id = readRequired("Application ID to withdraw: ");
+        long updated = applications.updateOne(Filters.eq("applicationId", id),
+                Updates.combine(Updates.set("status", "Withdrawn"),
+                        Updates.set("updatedAt", Instant.now().toString()))).getModifiedCount();
+        System.out.println(updated == 1 ? "Application withdrawn." : "Application not found or already withdrawn.");
+    }
+
+    // -------------------- CANDIDATE SEARCH --------------------
+
+    private static void candidateSearch() {
+        System.out.println("\n--- CANDIDATE SEARCH ---");
+        System.out.println("Leave any filter blank to skip it.");
+        String department = readLine("Department: ").trim();
+        String minText = readLine("Minimum CGPA: ").trim();
+        String skill = readLine("Required skill: ").trim();
+
+        List<org.bson.conversions.Bson> filters = new ArrayList<>();
+        if (!department.isEmpty()) filters.add(Filters.regex("department", "^" + regexQuote(department) + "$", "i"));
+        if (!skill.isEmpty()) filters.add(Filters.regex("skills", "^" + regexQuote(skill) + "$", "i"));
+        if (!minText.isEmpty()) {
+            try {
+                double min = Double.parseDouble(minText);
+                if (min < 0 || min > 10) {
+                    System.out.println("Minimum CGPA must be between 0 and 10.");
+                    return;
+                }
+                filters.add(Filters.gte("cgpa", min));
+            } catch (NumberFormatException e) {
+                System.out.println("Invalid CGPA.");
+                return;
+            }
+        }
+
+        org.bson.conversions.Bson filter = filters.isEmpty() ? new Document() : Filters.and(filters);
+        printDocuments(students.find(filter).sort(Sorts.descending("cgpa")));
+    }
+
+    // -------------------- PLACEMENT ANALYTICS --------------------
+
+    private static void analyticsMenu() {
+        while (true) {
+            System.out.println("\n--- PLACEMENT ANALYTICS ---");
+            System.out.println("1. Overall counts");
+            System.out.println("2. Department-wise student statistics");
+            System.out.println("3. Average CGPA by department");
+            System.out.println("4. Top students by CGPA");
+            System.out.println("5. Application status statistics");
+            System.out.println("6. Placement summary");
+            System.out.println("7. Back");
+            int choice = readInt("Enter choice: ");
+
+            switch (choice) {
+                case 1 -> overallCounts();
+                case 2 -> departmentStats();
+                case 3 -> averageCgpaByDepartment();
+                case 4 -> topStudents();
+                case 5 -> applicationStatusStats();
+                case 6 -> placementSummary();
+                case 7 -> { return; }
+                default -> System.out.println("Invalid choice.");
+            }
+        }
+    }
+
+    private static void overallCounts() {
+        System.out.println("\n--- OVERALL COUNTS ---");
+        System.out.println("Students: " + students.countDocuments());
+        System.out.println("Companies: " + companies.countDocuments());
+        System.out.println("Job drives: " + jobDrives.countDocuments());
+        System.out.println("Applications: " + applications.countDocuments());
+    }
+
+    private static void departmentStats() {
+        System.out.println("\n--- DEPARTMENT-WISE STUDENT STATISTICS ---");
+        for (Document row : students.aggregate(List.of(
+                Aggregates.match(Filters.exists("department", true)),
+                Aggregates.group("$department",
+                        Accumulators.sum("studentCount", 1),
+                        Accumulators.avg("averageCgpa", "$cgpa")),
+                Aggregates.sort(Sorts.ascending("_id"))))) {
+            System.out.println("Department: " + row.get("_id")
+                    + " | Students: " + row.get("studentCount")
+                    + " | Average CGPA: " + formatNumber(row.get("averageCgpa")));
+        }
+    }
+
+    private static void averageCgpaByDepartment() {
+        System.out.println("\n--- AVERAGE CGPA BY DEPARTMENT ---");
+        for (Document row : students.aggregate(List.of(
+                Aggregates.match(Filters.and(
+                        Filters.exists("department", true),
+                        Filters.exists("cgpa", true))),
+                Aggregates.group("$department",
+                        Accumulators.avg("averageCgpa", "$cgpa"),
+                        Accumulators.sum("studentCount", 1)),
+                Aggregates.sort(Sorts.descending("averageCgpa"))))) {
+            System.out.println("Department: " + row.get("_id")
+                    + " | Average CGPA: " + formatNumber(row.get("averageCgpa"))
+                    + " | Students counted: " + row.get("studentCount"));
+        }
+    }
+
+    private static void topStudents() {
+        int limit = readInt("How many top students? ");
+        if (limit < 1 || limit > 100) {
+            System.out.println("Enter a number from 1 to 100.");
+            return;
+        }
+        printDocuments(students.find(Filters.exists("cgpa", true))
+                .sort(Sorts.descending("cgpa")).limit(limit));
+    }
+
+    private static void applicationStatusStats() {
+        System.out.println("\n--- APPLICATION STATUS STATISTICS ---");
+        for (Document row : applications.aggregate(List.of(
+                Aggregates.group("$status", Accumulators.sum("count", 1)),
+                Aggregates.sort(Sorts.ascending("_id"))))) {
+            System.out.println("Status: " + row.get("_id") + " | Count: " + row.get("count"));
+        }
+    }
+
+    private static void placementSummary() {
+        long totalStudents = students.countDocuments();
+        long totalApplications = applications.countDocuments();
+        long selectedApplications = applications.countDocuments(Filters.eq("status", "Selected"));
+        long placedStudents = applications.distinct("studentId", String.class)
+                .into(new ArrayList<>()).stream()
+                .filter(id -> applications.find(Filters.and(
+                        Filters.eq("studentId", id),
+                        Filters.eq("status", "Selected"))).first() != null)
+                .count();
+
+        double rate = totalStudents == 0 ? 0.0 : (placedStudents * 100.0 / totalStudents);
+        System.out.println("\n--- PLACEMENT SUMMARY ---");
+        System.out.println("Registered students: " + totalStudents);
+        System.out.println("Total applications: " + totalApplications);
+        System.out.println("Selected applications: " + selectedApplications);
+        System.out.println("Unique students with Selected status: " + placedStudents);
+        System.out.printf("Student placement rate: %.2f%%%n", rate);
+        System.out.println("Note: this is based on applications whose status is exactly 'Selected'.");
+    }
+
+    // -------------------- COMMON HELPERS --------------------
+
+    private static void printDocuments(Iterable<Document> docs) {
+        boolean found = false;
+        for (Document doc : docs) {
+            System.out.println("----------------------------------------");
+            System.out.println(doc.toJson());
+            found = true;
+        }
+        if (!found) System.out.println("No matching records found.");
+        else System.out.println("----------------------------------------");
+    }
+
+    private static void printOne(Document doc) {
+        if (doc == null) System.out.println("Record not found.");
+        else System.out.println(doc.toJson());
+    }
+
+    private static String readLine(String prompt) {
+        System.out.print(prompt);
+        return SC.nextLine();
+    }
+
+    private static String readRequired(String prompt) {
+        while (true) {
+            String value = readLine(prompt).trim();
+            if (!value.isEmpty()) return value;
+            System.out.println("This field cannot be empty.");
+        }
+    }
+
+    private static int readInt(String prompt) {
+        while (true) {
+            String value = readLine(prompt).trim();
+            try {
+                return Integer.parseInt(value);
+            } catch (NumberFormatException e) {
+                System.out.println("Enter a valid whole number.");
+            }
+        }
+    }
+
+    private static double readDouble(String prompt) {
+        while (true) {
+            String value = readLine(prompt).trim();
+            try {
+                return Double.parseDouble(value);
+            } catch (NumberFormatException e) {
+                System.out.println("Enter a valid number.");
+            }
+        }
+    }
+
+    private static List<String> readCsvList(String prompt) {
+        return parseCsv(readLine(prompt));
+    }
+
+    private static List<String> parseCsv(String value) {
+        List<String> result = new ArrayList<>();
+        if (value == null || value.isBlank()) return result;
+        for (String item : value.split(",")) {
+            String trimmed = item.trim();
+            if (!trimmed.isEmpty() && !result.contains(trimmed)) result.add(trimmed);
+        }
+        return result;
+    }
+
+    private static String normalizeApplicationStatus(String value) {
+        String[] allowed = {"Applied", "Shortlisted", "Interview", "Selected", "Rejected", "Withdrawn"};
+        for (String status : allowed) {
+            if (status.equalsIgnoreCase(value.trim())) return status;
+        }
+        return null;
+    }
+
+    private static double numberValue(Object value, double fallback) {
+        if (value instanceof Number n) return n.doubleValue();
+        return fallback;
+    }
+
+    private static String formatNumber(Object value) {
+        if (!(value instanceof Number n)) return "N/A";
+        return String.format("%.2f", n.doubleValue());
+    }
+
+    private static String regexQuote(String value) {
+        return java.util.regex.Pattern.quote(value);
+    }
+}
+
+
+
+
+OUTPUT:
+
+
+========== PLACEMENT MANAGEMENT SYSTEM ==========
+1. Student Management
+2. Company Management
+3. Job Drive Management
+4. Application Management
+5. Candidate Search
+6. Placement Analytics
+7. Exit
+Enter choice: 
