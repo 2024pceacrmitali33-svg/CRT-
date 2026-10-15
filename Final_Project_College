@@ -1,0 +1,550 @@
+package com.example;
+
+import com.mongodb.client.MongoClient;
+import com.mongodb.client.MongoClients;
+import com.mongodb.client.MongoDatabase;
+import com.mongodb.client.MongoCollection;
+import org.bson.Document;
+
+public class App {
+    public static void main(String[] args) {
+        String uri = System.getenv("MONGODB_URI");
+
+        if (uri == null || uri.isBlank()) {
+            System.out.println("Please set MONGODB_URI first.");
+            return;
+        }
+
+        try (MongoClient client = MongoClients.create(uri)) {
+            MongoDatabase database = client.getDatabase("college");
+            MongoCollection<Document> students =
+                    database.getCollection("students");
+
+            database.runCommand(new Document("ping", 1));
+
+            System.out.println("MongoDB connected successfully!");
+            System.out.println("Database selected: " + database.getName());
+            System.out.println("Collection selected: " + students.getNamespace().getCollectionName());
+        } catch (Exception e) {
+            System.out.println("Error: " + e.getMessage());
+        }
+
+
+
+
+
+
+
+
+package com.example;
+
+import com.mongodb.client.MongoClient;
+import com.mongodb.client.MongoClients;
+import com.mongodb.client.MongoCollection;
+import com.mongodb.client.MongoDatabase;
+import com.mongodb.client.model.Filters;
+import org.bson.Document;
+import java.util.Scanner;
+
+public class App {
+    public static void main(String[] args) {
+        String uri = System.getenv("MONGODB_URI");
+
+        if (uri == null || uri.isBlank()) {
+            System.out.println("Please set MONGODB_URI first.");
+            return;
+        }
+
+        try (
+            MongoClient client = MongoClients.create(uri);
+            Scanner sc = new Scanner(System.in)
+        ) {
+            MongoDatabase database = client.getDatabase("college");
+            MongoCollection<Document> students =
+                    database.getCollection("students");
+
+            database.runCommand(new Document("ping", 1));
+            System.out.println("MongoDB connected successfully!");
+
+            while (true) {
+                System.out.println("\n--- Student Search Menu ---");
+                System.out.println("1. Search by ID");
+                System.out.println("2. Search by Department");
+                System.out.println("3. Search by CGPA");
+                System.out.println("4. Search by Skill");
+                System.out.println("5. View All Students");
+                System.out.println("6. Exit");
+                System.out.print("Enter choice: ");
+
+                if (!sc.hasNextInt()) {
+                    System.out.println("Invalid choice!");
+                    sc.nextLine();
+                    continue;
+                }
+
+                int choice = sc.nextInt();
+                sc.nextLine();
+
+                switch (choice) {
+                    case 1:
+                        System.out.print("Enter student ID: ");
+                        String id = sc.nextLine();
+
+                        Document byId = students.find(
+                                Filters.eq("studentId", id)).first();
+
+                        if (byId != null) {
+                            System.out.println(byId.toJson());
+                        } else {
+                            System.out.println("Student not found.");
+                        }
+                        break;
+
+                    case 2:
+                        System.out.print("Enter department: ");
+                        String departmentName = sc.nextLine();
+
+                        showStudents(students, Filters.eq(
+                                "department", departmentName));
+                        break;
+
+                    case 3:
+                        System.out.print("Enter minimum CGPA: ");
+                        if (!sc.hasNextDouble()) {
+                            System.out.println("Invalid CGPA!");
+                            sc.nextLine();
+                            break;
+                        }
+                        double cgpa = sc.nextDouble();
+                        sc.nextLine();
+
+                        showStudents(students, Filters.gte("cgpa", cgpa));
+                        break;
+
+                    case 4:
+                        System.out.print("Enter skill: ");
+                        String skill = sc.nextLine();
+
+                        showStudents(students, Filters.eq("skills", skill));
+                        break;
+
+                    case 5:
+                        showStudents(students, new Document());
+                        break;
+
+                    case 6:
+                        System.out.println("Exiting program...");
+                        return;
+
+                    default:
+                        System.out.println("Invalid choice!");
+                }
+            }
+        } catch (Exception e) {
+            System.out.println("Error: " + e.getMessage());
+        }
+    }
+
+    private static void showStudents(
+            MongoCollection<Document> students,
+            org.bson.conversions.Bson filter) {
+
+        boolean found = false;
+
+        for (Document student : students.find(filter)) {
+            System.out.println(student.toJson());
+            found = true;
+        }
+
+        if (!found) {
+            System.out.println("No matching students found.");
+        }
+    }
+}
+
+
+OUTPUT:
+PS C:\JavaProjects> cd C:\JavaProjects\mongo-java-project
+PS C:\JavaProjects\mongo-java-project> $env:MONGODB_URI="mongodb+srv://2024pceacrmitali33_db_user:mLlJw0mgCWgAGGj8@cluster0.h2vsj9d.mongodb.net/?retryWrites=true&w=majority"
+PS C:\JavaProjects\mongo-java-project> mvn clean compile
+>> mvn exec:java -Dexec.mainClass="com.example.App"
+[INFO] Scanning for projects...
+[INFO] 
+[INFO] -------------------< com.example:mongo-java-project >-------------------
+[INFO] Building mongo-java-project 1.0-SNAPSHOT
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] Loaded 24090 auto-discovered prefixes for remote repository central (prefixes-central.txt)
+[INFO] Loaded 74 auto-discovered prefixes for remote repository apache.snapshots (prefixes-apache.snapshots.txt)
+[INFO] 
+[INFO] --- clean:3.5.0:clean (default-clean) @ mongo-java-project ---
+[INFO] Deleting C:\JavaProjects\mongo-java-project\target
+[INFO] 
+[INFO] --- resources:3.5.0:resources (default-resources) @ mongo-java-project ---
+[INFO] skip non existing resourceDirectory C:\JavaProjects\mongo-java-project\src\main\resources
+[INFO] 
+[INFO] --- compiler:3.14.0:compile (default-compile) @ mongo-java-project ---
+[INFO] Recompiling the module because of changed source code.
+[INFO] Compiling 1 source file with javac [debug target 17] to target\classes
+[WARNING] location of system modules is not set in conjunction with -source 17
+  not setting the location of system modules may lead to class files that cannot run on JDK 17
+    --release 17 is recommended instead of -source 17 -target 17 because it sets the location of system modules automatically
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD SUCCESS
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  6.087 s
+[INFO] Finished at: 2026-10-15T10:10:54+05:30
+[INFO] ------------------------------------------------------------------------
+[INFO] Scanning for projects...
+[INFO] Loaded 24090 auto-discovered prefixes for remote repository central (prefixes-central.txt)
+[INFO] 
+[INFO] -------------------< com.example:mongo-java-project >-------------------
+[INFO] Building mongo-java-project 1.0-SNAPSHOT
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] ------------------------------------------------------------------------
+[ERROR] BUILD FAILURE
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  0.305 s
+[INFO] Finished at: 2026-10-15T10:10:55+05:30
+[INFO] ------------------------------------------------------------------------
+[ERROR] Unknown lifecycle phase ".mainClass=com.example.App". You must specify a valid lifecycle phase or a goal in the format <plugin-prefix>:<goal> or <plugin-group-id>:<plugin-artifact-id>[:<plugin-version>]:<goal>. Available lifecycle phases are: pre-clean, clean, post-clean, validate, initialize, generate-sources, process-sources, generate-resources, process-resources, compile, process-classes, generate-test-sources, process-test-sources, generate-test-resources, process-test-resources, test-compile, process-test-classes, test, prepare-package, package, pre-integration-test, integration-test, post-integration-test, verify, install, deploy, pre-site, site, post-site, site-deploy. -> [Help 1]
+[ERROR] 
+[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.
+[ERROR] Re-run Maven using the -X switch to enable full debug logging.
+[ERROR] 
+[ERROR] For more information about the errors and possible solutions, please read the following articles:
+[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/LifecyclePhaseNotFoundException
+PS C:\JavaProjects\mongo-java-project> mvn exec:java "-Dexec.mainClass=com.example.App"
+[INFO] Scanning for projects...
+[INFO] Loaded 24090 auto-discovered prefixes for remote repository central (prefixes-central.txt)
+[INFO] 
+[INFO] -------------------< com.example:mongo-java-project >-------------------
+[INFO] Building mongo-java-project 1.0-SNAPSHOT
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- exec:3.5.0:java (default-cli) @ mongo-java-project ---
+[INFO] Loaded 74 auto-discovered prefixes for remote repository apache.snapshots (prefixes-apache.snapshots.txt)
+[INFO] Loaded 50 auto-discovered prefixes for remote repository ow2-snapshot (prefixes-ow2-snapshot.txt)
+Oct 15, 2026 10:11:12 AM com.mongodb.internal.diagnostics.logging.Loggers shouldUseSLF4J
+WARNING: SLF4J not found on the classpath.  Logging is disabled for the 'org.mongodb.driver' component
+MongoDB connected successfully!
+
+--- Student Menu ---
+1. Add Student1 Mahi 
+2. View Students
+3. Exit
+Enter choice: 1         
+Enter student name: Mahi 
+Enter age: 20
+Enter course: B.Tech
+Student added successfully!
+
+--- Student Menu ---
+1. Add Student
+2. View Students
+3. Exit
+Enter choice: 1
+Enter student name: Mayank 
+Enter age: 21
+Enter course: B.Tech
+Student added successfully!
+
+--- Student Menu ---
+1. Add Student
+2. View Students
+3. Exit
+Enter choice: 2
+
+--- Student Records ---
+{"_id": {"$oid": "6ad05ad0c31d0944b645e6b7"}, "name": "Mahi", "age": 20, "course": "B.Tech"}
+{"_id": {"$oid": "6ad05b26c31d0944b645e6b8"}, "name": "Mayank ", "age": 21, "course": "B.Tech"}
+
+--- Student Menu ---
+1. Add Student
+2. View Students
+3. Exit
+Enter choice: 2
+
+--- Student Records ---
+{"_id": {"$oid": "6ad05ad0c31d0944b645e6b7"}, "name": "Mahi", "age": 20, "course": "B.Tech"}
+{"_id": {"$oid": "6ad05b26c31d0944b645e6b8"}, "name": "Mayank ", "age": 21, "course": "B.Tech"}
+
+--- Student Menu ---
+1. Add Student
+2. View Students
+3. Exit
+Enter choice: 1
+Enter student name: Mitali 
+Enter age: 20 
+Enter course: B.Tech 
+Student added successfully!
+
+--- Student Menu ---
+1. Add Student
+2. View Students
+3. Exit
+Enter choice: 1
+Enter student name: Himanshu 
+Enter age: 20
+Enter course: B.Tech
+Student added successfully!
+
+--- Student Menu ---
+1. Add Student
+2. View Students
+3. Exit
+Enter choice: 3
+Exiting program...
+[WARNING] thread Thread[#78,BufferPoolPruner-1-thread-1,5,com.example.App] was interrupted but is still alive after waiting at least 15000msecs
+[WARNING] thread Thread[#78,BufferPoolPruner-1-thread-1,5,com.example.App] will linger despite being asked to die via interruption
+[WARNING] NOTE: 1 thread(s) did not finish despite being asked to via interruption. This is not a problem with exec:java, it is a problem with the running code. Although not serious, it should be remedied.
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD SUCCESS
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  14:08 min
+[INFO] Finished at: 2026-10-15T10:25:17+05:30
+[INFO] ------------------------------------------------------------------------
+PS C:\JavaProjects\mongo-java-project> mvn exec:java "-Dexec.mainClass=com.example.App"
+[INFO] Scanning for projects...
+[INFO] Loaded 24090 auto-discovered prefixes for remote repository central (prefixes-central.txt)
+[INFO] 
+[INFO] -------------------< com.example:mongo-java-project >-------------------
+[INFO] Building mongo-java-project 1.0-SNAPSHOT
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- exec:3.5.0:java (default-cli) @ mongo-java-project ---
+[INFO] Loaded 74 auto-discovered prefixes for remote repository apache.snapshots (prefixes-apache.snapshots.txt)
+[INFO] Loaded 50 auto-discovered prefixes for remote repository ow2-snapshot (prefixes-ow2-snapshot.txt)
+Oct 15, 2026 10:26:16 AM com.mongodb.internal.diagnostics.logging.Loggers shouldUseSLF4J
+WARNING: SLF4J not found on the classpath.  Logging is disabled for the 'org.mongodb.driver' component
+MongoDB connected successfully!
+
+--- Student Menu ---
+1. Add Student
+2. View Students
+3. Exit
+Enter choice
+
+
+
+
+
+
+
+
+package com.example;
+
+import com.mongodb.client.MongoClient;
+import com.mongodb.client.MongoClients;
+import com.mongodb.client.MongoDatabase;
+import com.mongodb.client.MongoCollection;
+import org.bson.Document;
+import java.util.Scanner;
+
+public class App {
+    public static void main(String[] args) {
+        String uri = System.getenv("MONGODB_URI");
+        if (uri == null || uri.isBlank()) {
+            uri = "mongodb+srv://2024pceacrmitali33_db_user:mL1Jw0mgCWgAGGj8@cluster0.h2vsj9d.mongodb.net/?retryWrites=true&w=majority";
+        }
+
+        try (
+            MongoClient client = MongoClients.create(uri);
+            Scanner sc = new Scanner(System.in)
+        ) {
+            MongoDatabase database = client.getDatabase("college");
+            MongoCollection<Document> students = database.getCollection("students");
+
+            database.runCommand(new Document("ping", 1));
+            System.out.println("MongoDB connected successfully!");
+
+            while (true) {
+                System.out.println("\n--- Student Menu ---");
+                System.out.println("1. Add Student");
+                System.out.println("2. View Students");
+                System.out.println("3. Exit");
+                System.out.print("Enter choice: ");
+
+                if (!sc.hasNextInt()) {
+                    System.out.println("Invalid input!");
+                    sc.nextLine();
+                    continue;
+                }
+
+                int choice = sc.nextInt();
+                sc.nextLine();
+
+                if (choice == 1) {
+                    System.out.print("Enter student name: ");
+                    String name = sc.nextLine();
+
+                    System.out.print("Enter age: ");
+                    if (!sc.hasNextInt()) {
+                        System.out.println("Age must be a number!");
+                        sc.nextLine();
+                        continue;
+                    }
+                    int age = sc.nextInt();
+                    sc.nextLine();
+
+                    System.out.print("Enter course: ");
+                    String course = sc.nextLine();
+
+                    Document student = new Document("name", name)
+                            .append("age", age)
+                            .append("course", course);
+
+                    students.insertOne(student);
+                    System.out.println("Student added successfully!");
+
+                } else if (choice == 2) {
+                    System.out.println("\n--- Student Records ---");
+                    boolean found = false;
+
+                    for (Document student : students.find()) {
+                        System.out.println(student.toJson());
+                        found = true;
+                    }
+
+                    if (!found) {
+                        System.out.println("No students found.");
+                    }
+
+                } else if (choice == 3) {
+                    System.out.println("Exiting program...");
+                    break;
+
+                } else {
+                    System.out.println("Invalid choice!");
+                }
+            }
+        } catch (Exception e) {
+            System.out.println("Error: " + e.getMessage());
+        }
+    }
+}
+
+
+
+
+PS C:\JavaProjects> cd C:\JavaProjects\mongo-java-project
+PS C:\JavaProjects\mongo-java-project> $env:MONGODB_URI = "mongodb+srv://YOUR_USERNAME:YOUR_PASSWORD@cluster0.h2vsj9d.mongodb.net/?retryWrites=true&w=majority"
+PS C:\JavaProjects\mongo-java-project> mvn clean compile
+[INFO] Scanning for projects...
+[INFO] 
+[INFO] -------------------< com.example:mongo-java-project >-------------------
+[INFO] Building mongo-java-project 1.0-SNAPSHOT
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] Loaded 24090 auto-discovered prefixes for remote repository central (prefixes-central.txt)
+[INFO] Loaded 74 auto-discovered prefixes for remote repository apache.snapshots (prefixes-apache.snapshots.txt)
+[INFO] 
+[INFO] --- clean:3.5.0:clean (default-clean) @ mongo-java-project ---
+[INFO] Deleting C:\JavaProjects\mongo-java-project\target
+[INFO] 
+[INFO] --- resources:3.5.0:resources (default-resources) @ mongo-java-project ---
+[INFO] skip non existing resourceDirectory C:\JavaProjects\mongo-java-project\src\main\resources
+[INFO] 
+[INFO] --- compiler:3.14.0:compile (default-compile) @ mongo-java-project ---
+[INFO] Recompiling the module because of changed source code.
+[INFO] Compiling 1 source file with javac [debug target 17] to target\classes
+[WARNING] location of system modules is not set in conjunction with -source 17
+  not setting the location of system modules may lead to class files that cannot run on JDK 17
+    --release 17 is recommended instead of -source 17 -target 17 because it sets the location of system modules automatically
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD SUCCESS
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  1.280 s
+[INFO] Finished at: 2026-10-15T12:38:47+05:30
+[INFO] ------------------------------------------------------------------------
+PS C:\JavaProjects\mongo-java-project> mvn exec:java
+[INFO] Scanning for projects...
+[INFO] Loaded 24090 auto-discovered prefixes for remote repository central (prefixes-central.txt)
+[INFO] 
+[INFO] -------------------< com.example:mongo-java-project >-------------------
+[INFO] Building mongo-java-project 1.0-SNAPSHOT
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- exec:3.5.0:java (default-cli) @ mongo-java-project ---
+[INFO] Loaded 74 auto-discovered prefixes for remote repository apache.snapshots (prefixes-apache.snapshots.txt)
+[INFO] Loaded 50 auto-discovered prefixes for remote repository ow2-snapshot (prefixes-ow2-snapshot.txt)
+Oct 15, 2026 12:40:35 PM com.mongodb.internal.diagnostics.logging.Loggers shouldUseSLF4J
+WARNING: SLF4J not found on the classpath.  Logging is disabled for the 'org.mongodb.driver' component
+Error: Failed looking up TXT record for host cluster0.h2vsj9d.mongodb.net
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD SUCCESS
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  0.707 s
+[INFO] Finished at: 2026-10-15T12:40:35+05:30
+[INFO] ------------------------------------------------------------------------
+PS C:\JavaProjects\mongo-java-project> mvn exec:java
+[INFO] Scanning for projects...
+[INFO] Loaded 24090 auto-discovered prefixes for remote repository central (prefixes-central.txt)
+[INFO] 
+[INFO] -------------------< com.example:mongo-java-project >-------------------
+[INFO] Building mongo-java-project 1.0-SNAPSHOT
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- exec:3.5.0:java (default-cli) @ mongo-java-project ---
+[INFO] Loaded 74 auto-discovered prefixes for remote repository apache.snapshots (prefixes-apache.snapshots.txt)
+[INFO] Loaded 50 auto-discovered prefixes for remote repository ow2-snapshot (prefixes-ow2-snapshot.txt)
+Oct 15, 2026 12:56:46 PM com.mongodb.internal.diagnostics.logging.Loggers shouldUseSLF4J
+WARNING: SLF4J not found on the classpath.  Logging is disabled for the 'org.mongodb.driver' component
+Error: Exception authenticating MongoCredential{mechanism=SCRAM-SHA-1, userName='YOUR_USERNAME', source='admin', password=<hidden>, mechanismProperties=<hidden>}
+[WARNING] thread Thread[#78,BufferPoolPruner-1-thread-1,5,com.example.App] was interrupted but is still alive after waiting at least 15000msecs
+[WARNING] thread Thread[#78,BufferPoolPruner-1-thread-1,5,com.example.App] will linger despite being asked to die via interruption
+[WARNING] NOTE: 1 thread(s) did not finish despite being asked to via interruption. This is not a problem with exec:java, it is a problem with the running code. Although not serious, it should be remedied.
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD SUCCESS
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  17.829 s
+[INFO] Finished at: 2026-10-15T12:57:02+05:30
+[INFO] ------------------------------------------------------------------------
+PS C:\JavaProjects\mongo-java-project> $env:MONGODB_URI = "mongodb+srv://ACTUAL_USERNAME:ACTUAL_PASSWORD@cluster0.h2vsj9d.mongodb.net/?retryWrites=true&w=majority"
+PS C:\JavaProjects\mongo-java-project> mvn exec:java
+[INFO] Scanning for projects...
+[INFO] Loaded 24090 auto-discovered prefixes for remote repository central (prefixes-central.txt)
+[INFO] 
+[INFO] -------------------< com.example:mongo-java-project >-------------------
+[INFO] Building mongo-java-project 1.0-SNAPSHOT
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- exec:3.5.0:java (default-cli) @ mongo-java-project ---
+[INFO] Loaded 74 auto-discovered prefixes for remote repository apache.snapshots (prefixes-apache.snapshots.txt)
+[INFO] Loaded 50 auto-discovered prefixes for remote repository ow2-snapshot (prefixes-ow2-snapshot.txt)
+Oct 15, 2026 12:58:39 PM com.mongodb.internal.diagnostics.logging.Loggers shouldUseSLF4J
+WARNING: SLF4J not found on the classpath.  Logging is disabled for the 'org.mongodb.driver' component
+Error: Exception authenticating MongoCredential{mechanism=SCRAM-SHA-1, userName='ACTUAL_USERNAME', source='admin', password=<hidden>, mechanismProperties=<hidden>}
+[WARNING] thread Thread[#78,BufferPoolPruner-1-thread-1,5,com.example.App] was interrupted but is still alive after waiting at least 15000msecs
+[WARNING] thread Thread[#78,BufferPoolPruner-1-thread-1,5,com.example.App] will linger despite being asked to die via interruption
+[WARNING] NOTE: 1 thread(s) did not finish despite being asked to via interruption. This is not a problem with exec:java, it is a problem with the running code. Although not serious, it should be remedied.
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD SUCCESS
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  18.288 s
+[INFO] Finished at: 2026-10-15T12:58:55+05:30
+[INFO] ------------------------------------------------------------------------
+MongoDB connected successfully!
+
+--- Student Search Menu ---
+1. Search by ID
+2. Search by Department
+3. Search by CGPA
+4. Search by Skill
+5. View All Students
+6. Exit
+
+Enter choice:
+
+
+
+
+
+    }
+}
